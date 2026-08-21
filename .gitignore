@@ -1,0 +1,32 @@
+# Bytecode & Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Môi trường ảo Python
+venv/
+ENV/
+env/
+.venv/
+
+# Cache IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter Notebook Cache
+.ipynb_checkpoints/
+
+# Tệp dữ liệu lớn (GitHub giới hạn 50MB - 100MB)
+phishing_site_urls.csv
+data/processed/features_extracted.csv
+data/url_dataset_300000_row.csv
+data/url_dataset_300000_row.xlsx
+
+# Tệp mô hình lớn (Giữ lại hoặc bỏ qua joblib lớn)
+models/*.joblib
+
+# Tệp tạm & Logs
+*.log
+scratch/
