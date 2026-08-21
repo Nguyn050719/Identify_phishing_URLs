@@ -31,13 +31,15 @@ OFFICIAL_LEGITIMATE_DOMAINS = {
 
 # Danh sách dịch vụ rút gọn URL
 SHORTENING_SERVICES = {
-    'bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'is.gd', 'cli.gs',
+    'bit.ly', 'tinyurl.com', 'tinyurl.vn', 'vnshort.com', 'vnshort.vn', 'vnshort.net', 't.co', 'goo.gl', 'is.gd', 'cli.gs',
     'yfrog.com', 'migre.me', 'ff.im', 'tiny.cc', 'url4.eu', 'twit.ac',
     'su.pr', 'twurl.nl', 'snipurl.com', 'short.to', 'BudURL.com',
     'ping.fm', 'post.ly', 'Just.as', 'bkite.com', 'snipr.com', 'fic.kr',
     'loopt.us', 'to.ly', 'rayurl.com', 'ow.ly', 'sharein.com', 'is.gd',
     'link.zip.net', 'ity.im', 'q.gs', 'is.gd', 'po.st', 'bc.vc',
-    'twitthis.com', 'u.to', 'j.mp', 'buzurl.com', 'cutt.ly', 'adf.ly'
+    'twitthis.com', 'u.to', 'j.mp', 'buzurl.com', 'cutt.ly', 'adf.ly',
+    'rb.gy', 'shorturl.at', 's.id', 'vn.short.gy', 'rutgon.me', 'bit.do',
+    'v.gd', 't.ly', 'clck.ru'
 }
 
 # Từ khóa nhạy cảm
@@ -83,11 +85,107 @@ def is_ip_address(hostname):
         return 1
     return 0
 
-def extract_features(url):
+def unshorten_single(url, timeout=2.5):
+    if not isinstance(url, str) or not url.strip():
+        return url, False
+    url_str = url.strip()
+    url_lower = url_str.lower()
+    
+    url_for_parse = url_str if (url_lower.startswith('http://') or url_lower.startswith('https://')) else 'http://' + url_str
+    try:
+        parsed = urllib.parse.urlparse(url_for_parse)
+        path = parsed.path
+        ext = tldextract.extract(url_for_parse)
+        registered_domain = getattr(ext, 'top_domain_under_public_suffix', getattr(ext, 'registered_domain', ''))
+        domain_name = ext.domain
+        suffix = ext.suffix
+        full_domain = f"{domain_name}.{suffix}".lower() if suffix else domain_name.lower()
+    except Exception:
+        path = ""
+        registered_domain = ""
+        full_domain = ""
+        
+    is_shortener_domain = (full_domain in SHORTENING_SERVICES or registered_domain.lower() in SHORTENING_SERVICES)
+    looks_like_shortener_path = (len(path.strip('/')) > 0 and len(path.strip('/')) <= 20 and '.' not in path)
+    
+    if not (is_shortener_domain or looks_like_shortener_path):
+        return url_str, False
+
+    curr_url = url_str
+    expanded = False
+    
+    try:
+        url_req = curr_url if (curr_url.lower().startswith('http://') or curr_url.lower().startswith('https://')) else 'http://' + curr_url
+        import requests
+        resp = requests.head(url_req, allow_redirects=True, timeout=timeout, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+        if resp.url and resp.url.strip().rstrip('/') != curr_url.strip().rstrip('/'):
+            curr_url = resp.url.strip()
+            expanded = True
+    except Exception:
+        try:
+            url_req = curr_url if (curr_url.lower().startswith('http://') or curr_url.lower().startswith('https://')) else 'http://' + curr_url
+            import requests
+            resp = requests.get(url_req, allow_redirects=True, stream=True, timeout=timeout, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            if resp.url and resp.url.strip().rstrip('/') != curr_url.strip().rstrip('/'):
+                curr_url = resp.url.strip()
+                expanded = True
+        except Exception:
+            pass
+            
+    if not expanded:
+        try:
+            url_req = curr_url if (curr_url.lower().startswith('http://') or curr_url.lower().startswith('https://')) else 'http://' + curr_url
+            import urllib.request
+            req = urllib.request.Request(url_req, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                next_u = r.geturl()
+                if next_u and next_u.strip().rstrip('/') != curr_url.strip().rstrip('/'):
+                    curr_url = next_u.strip()
+                    expanded = True
+        except Exception:
+            pass
+
+    return curr_url, expanded
+
+def unshorten_url(url, timeout=2.5, max_chain=3):
+    curr = url
+    any_expanded = False
+    for _ in range(max_chain):
+        next_u, exp = unshorten_single(curr, timeout=timeout)
+        if exp:
+            curr = next_u
+            any_expanded = True
+        else:
+            break
+    return curr, any_expanded
+
+def extract_features(url, auto_unshorten=True):
     if not url or not isinstance(url, str):
         url = ""
 
-    url_str = url.strip()
+    original_url = url.strip()
+    target_url = original_url
+    unshortened_url = None
+    was_shortened = 0
+
+    if auto_unshorten and original_url:
+        expanded_url, is_exp = unshorten_url(original_url, timeout=2.5)
+        if is_exp:
+            target_url = expanded_url
+            unshortened_url = expanded_url
+            was_shortened = 1
+        else:
+            url_for_parse_init = original_url if (original_url.lower().startswith('http://') or original_url.lower().startswith('https://')) else 'http://' + original_url
+            try:
+                ext_i = tldextract.extract(url_for_parse_init)
+                reg_dom_i = getattr(ext_i, 'top_domain_under_public_suffix', getattr(ext_i, 'registered_domain', ''))
+                full_dom_i = f"{ext_i.domain}.{ext_i.suffix}".lower() if ext_i.suffix else ext_i.domain.lower()
+                if full_dom_i in SHORTENING_SERVICES or reg_dom_i.lower() in SHORTENING_SERVICES:
+                    was_shortened = 1
+            except Exception:
+                pass
+
+    url_str = target_url
     url_lower = url_str.lower()
 
     url_for_parse = url_str
@@ -130,12 +228,13 @@ def extract_features(url):
     has_at_symbol = 1 if '@' in url_str else 0
 
     full_domain = f"{domain_name}.{suffix}".lower() if suffix else domain_name.lower()
-    is_shortened = 1 if (full_domain in SHORTENING_SERVICES or registered_domain.lower() in SHORTENING_SERVICES) else 0
+    is_shortened = 1 if (was_shortened or full_domain in SHORTENING_SERVICES or registered_domain.lower() in SHORTENING_SERVICES) else 0
 
     security_keyword_count = sum(1 for kw in SECURITY_KEYWORDS if kw in url_lower)
     has_security_keywords = 1 if security_keyword_count > 0 else 0
 
-    is_official_domain = 1 if registered_domain.lower() in OFFICIAL_LEGITIMATE_DOMAINS else 0
+    OFFICIAL_TRUSTED_SUFFIXES = {'gov.vn', 'gov', 'edu.vn', 'edu', 'chinhphu.vn'}
+    is_official_domain = 1 if (registered_domain.lower() in OFFICIAL_LEGITIMATE_DOMAINS or suffix.lower() in OFFICIAL_TRUSTED_SUFFIXES) else 0
     targets_brand = 0
 
     if not is_official_domain:
@@ -152,7 +251,7 @@ def extract_features(url):
     count_hyphens = url_str.count('-')
     count_digits = sum(c.isdigit() for c in url_unquoted)
 
-    return {
+    res = {
         'url_length': url_length,
         'host_path_length': host_path_length,
         'subdomain_count': subdomain_count,
@@ -169,6 +268,10 @@ def extract_features(url):
         'count_hyphens': count_hyphens,
         'count_digits': count_digits
     }
+    if unshortened_url:
+        res['unshortened_url'] = unshortened_url
+
+    return res
 
 class PhishingDetectorApp:
     def __init__(self, root):
@@ -466,7 +569,9 @@ class PhishingDetectorApp:
         feats = extract_features(url)
 
         feat_str = f"=== BẢNG TRÍCH XUẤT ĐẶC TRƯNG URL ===\n"
-        feat_str += f"URL: {url}\n"
+        feat_str += f"URL Gốc: {url}\n"
+        if feats.get('unshortened_url'):
+            feat_str += f"🔗 URL Đích (Giải mã Unshorten): {feats['unshortened_url']}\n"
         feat_str += f"----------------------------------------\n"
         feat_str += f"1. Độ dài URL (Unquoted)     : {feats['url_length']} ký tự (Host+Path: {feats['host_path_length']})\n"
         feat_str += f"2. Số lượng Sub-domains       : {feats['subdomain_count']} (Lạm dụng >3: {'CÓ ⚠️' if feats['subdomain_abuse'] else 'Không'})\n"
@@ -546,6 +651,8 @@ class PhishingDetectorApp:
         res_str += "----------------------------------------\n"
         res_str += "📌 ĐÁNH GIÁ YẾU TỐ RỦI RO PHÁT HIỆN:\n"
         risk_factors = []
+        if feats.get('unshortened_url'):
+            risk_factors.append(f"- 🔗 Đã giải mã Link Rút gọn thành URL Đích: '{feats['unshortened_url']}'.")
         if feats['has_ip']: risk_factors.append("- URL sử dụng IP trực tiếp thay vì tên miền chuẩn.")
         if feats['subdomain_abuse']: risk_factors.append("- URL chứa quá nhiều Sub-domains (> 3 cấp).")
         if feats['is_shortened']: risk_factors.append("- Sử dụng dịch vụ rút gọn liên kết nhằm che giấu đích đến.")
@@ -565,11 +672,12 @@ class PhishingDetectorApp:
     # --- BATCH PREDICTION LOGIC ---
     def browse_batch_file(self):
         file_path = filedialog.askopenfilename(
-            title="Chọn Tệp CSV hoặc Excel",
+            title="Chọn Tệp CSV, Excel hoặc ZIP",
             filetypes=[
-                ("CSV & Excel Files", "*.csv *.xlsx *.xls"),
-                ("CSV Files", "*.csv"),
-                ("Excel Files", "*.xlsx *.xls")
+                ("Tệp Dữ liệu (CSV, Excel, ZIP)", "*.csv *.xlsx *.xls *.zip"),
+                ("Tệp ZIP", "*.zip"),
+                ("Tệp CSV", "*.csv"),
+                ("Tệp Excel", "*.xlsx *.xls")
             ]
         )
         if file_path:
@@ -580,7 +688,7 @@ class PhishingDetectorApp:
     def run_batch_prediction(self):
         file_path = getattr(self, 'batch_file_full_path', None) or self.batch_file_entry.get().strip()
         if not file_path or not os.path.exists(file_path):
-            messagebox.showwarning("Cảnh báo", "Vui lòng chọn tệp CSV hoặc Excel hợp lệ!")
+            messagebox.showwarning("Cảnh báo", "Vui lòng chọn tệp CSV, Excel hoặc ZIP hợp lệ!")
             return
 
         if not self.models:
@@ -597,7 +705,7 @@ class PhishingDetectorApp:
             ext = os.path.splitext(file_path)[1].lower()
             df_input = None
 
-            if ext == '.csv':
+            if ext in ['.csv', '.zip'] or file_path.endswith('.zip'):
                 try:
                     df_temp = pd.read_csv(file_path, header=None)
                     first_val = str(df_temp.iloc[0, 0]).strip().lower()
