@@ -5,7 +5,7 @@
 
 ---
 
-## 📌 Giới thiệu Đề tài
+##  Giới thiệu Đề tài
 
 Trong bối cảnh an ninh mạng ngày càng phức tạp, các đường liên kết lừa đảo (**Phishing URLs**) là phương thức hàng đầu được kẻ tấn công sử dụng để đánh cắp thông tin tài khoản, mật khẩu và dữ liệu nhạy cảm của người dùng.
 
@@ -15,19 +15,15 @@ Dự án xây dựng một **Hệ thống Phân loại Phishing URL tự động
 
 ## Tính năng 
 
-1. **🔍 Kiểm tra URL Đơn lẻ (Single URL Inference):**
+1. **🔍 Kiểm tra URL Đơn lẻ:**
    - Phân tích trực quan 15 nhóm đặc trưng kỹ thuật của URL thời gian thực.
    - Kết hợp vote đồng thuận xác suất từ 3 thuật toán ML và hiển thị mức độ rủi ro kèm màu sắc trực quan (Đỏ: Phishing / Xanh: An toàn).
 
 
-2. **Kiểm tra Hàng loạt từ File CSV / Excel (Batch File Processing):**
+2. **Kiểm tra Hàng loạt từ File CSV / Excel :**
    - Tải lên tệp CSV hoặc Excel (`.csv`, `.xlsx`, `.xls`) chứa danh sách URL (gồm 1 cột URL).
    - **Thuật toán Xử lý Lô Vector hóa (Vectorized Batch Processing):** Đạt tốc độ cực nhanh, phân loại **1,000 URLs chỉ trong 2 giây** và hỗ trợ các tệp dữ liệu lớn (**300,000+ dòng**).
-   - **Giao diện không bị đơ/lag:** Sử dụng chế độ **Smart Preview 1,000 dòng** kết hợp **Xuất file Ngầm bất đồng bộ (Async Export)** giúp phần mềm luôn chạy siêu mượt.
    - Bấm nút xuất báo cáo chi tiết ra file CSV hoặc Excel.
-
-3. **Báo cáo Jupyter Notebook Tự chứa (`notebooks/Phishing_URL_Classification.ipynb`):**
-   - Độc lập 100%, chứa mã nguồn tiền xử lý, huấn luyện mô hình, vẽ 6 biểu đồ báo cáo và kiểm thử trực tuyến.
 
 ---
 

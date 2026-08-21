@@ -621,30 +621,40 @@ class PhishingDetectorApp:
                 predictions[name] = None
                 probabilities[name] = 0.0
 
-        total_models = len(predictions)
-        avg_prob = sum(probabilities.values()) / total_models if total_models > 0 else 0
+        # Mô hình quyết định chính: Random Forest (Accuracy 83.60% cao nhất)
+        rf_pred = predictions.get("Random Forest")
+        rf_prob = probabilities.get("Random Forest", 0.0)
 
-        is_phishing = (phishing_votes >= (total_models / 2))
+        if rf_pred is not None:
+            is_phishing = (rf_pred == 1)
+            main_prob = rf_prob
+        else:
+            total_models = len(predictions)
+            avg_prob = sum(probabilities.values()) / total_models if total_models > 0 else 0
+            is_phishing = (phishing_votes >= (total_models / 2))
+            main_prob = avg_prob
 
         if feats['is_official_domain'] == 1 and feats['has_ip'] == 0 and feats['is_shortened'] == 0 and feats['abnormal_double_slash'] == 0 and feats['subdomain_abuse'] == 0 and feats['has_at_symbol'] == 0 and feats['targets_brand'] == 0:
             is_phishing = False
-            avg_prob = min(avg_prob, 0.05)
+            main_prob = min(main_prob, 0.05)
 
         if USE_CTK:
             if is_phishing:
-                self.alert_label.configure(text=f"🚨 CẢNH BÁO: PHISHING URL (Xác suất {avg_prob*100:.1f}%)", text_color="#ffffff")
+                self.alert_label.configure(text=f"🚨 CẢNH BÁO: PHISHING URL (Random Forest: {main_prob*100:.1f}% Rủi ro)", text_color="#ffffff")
                 self.alert_banner.configure(fg_color="#dc2626")
             else:
-                self.alert_label.configure(text=f"✅ LIÊN KẾT AN TOÀN / LEGITIMATE (Độ tin cậy {(1-avg_prob)*100:.1f}%)", text_color="#ffffff")
+                self.alert_label.configure(text=f"✅ LIÊN KẾT AN TOÀN (Random Forest: {(1-main_prob)*100:.1f}% Tin cậy)", text_color="#ffffff")
                 self.alert_banner.configure(fg_color="#16a34a")
 
-        res_str = "=== KẾT QUẢ ĐÁNH GIÁ CHI TIẾT ===\n\n"
+        res_str = "=== KẾT QUẢ ĐÁNH GIÁ 3 MÔ HÌNH ===\n"
+        res_str += "⭐ (Mô hình Random Forest - Accuracy 83.60% - làm căn cứ quyết định chính)\n\n"
         for name in ["Random Forest", "XGBoost", "SVM"]:
             if name in predictions and predictions[name] is not None:
                 pred = predictions[name]
                 prob = probabilities[name]
                 status = "🔴 PHISHING (Lừa đảo)" if pred == 1 else "🟢 BENIGN (An toàn)"
-                res_str += f"► Mô hình {name}:\n"
+                tag = " ⭐ [Mô hình chính]" if name == "Random Forest" else ""
+                res_str += f"► Mô hình {name}{tag}:\n"
                 res_str += f"   - Dự đoán : {status}\n"
                 res_str += f"   - Tỷ lệ Phishing: {prob*100:.2f}%\n\n"
 
@@ -789,14 +799,19 @@ class PhishingDetectorApp:
                 p_xgb = probs_xgb[idx]
                 p_svm = probs_svm[idx]
 
-                avg_prob = (p_rf + p_xgb + p_svm) / 3.0
-                votes = (1 if p_rf >= 0.5 else 0) + (1 if p_xgb >= 0.5 else 0) + (1 if p_svm >= 0.5 else 0)
-                is_phish = (votes >= 2)
+                # Primary Decision Engine: Random Forest (Accuracy 83.60%)
+                if rf:
+                    main_prob = p_rf
+                    is_phish = (p_rf >= 0.5)
+                else:
+                    main_prob = (p_rf + p_xgb + p_svm) / 3.0
+                    votes = (1 if p_rf >= 0.5 else 0) + (1 if p_xgb >= 0.5 else 0) + (1 if p_svm >= 0.5 else 0)
+                    is_phish = (votes >= 2)
 
                 # Official Whitelist Check
                 if feats['is_official_domain'] == 1 and feats['has_ip'] == 0 and feats['is_shortened'] == 0 and feats['abnormal_double_slash'] == 0 and feats['subdomain_abuse'] == 0 and feats['has_at_symbol'] == 0 and feats['targets_brand'] == 0:
                     is_phish = False
-                    avg_prob = min(avg_prob, 0.05)
+                    main_prob = min(main_prob, 0.05)
 
                 if is_phish:
                     phish_count += 1
@@ -808,8 +823,8 @@ class PhishingDetectorApp:
                 results.append({
                     "STT": idx + 1,
                     "URL": u_str,
-                    "Kết luận": status_str,
-                    "Tỷ lệ Phishing (%)": f"{avg_prob*100:.2f}%",
+                    "Kết luận (RF Main)": status_str,
+                    "Rủi ro Phishing (RF %)": f"{main_prob*100:.2f}%",
                     "RF Prob (%)": f"{p_rf*100:.1f}%",
                     "XGB Prob (%)": f"{p_xgb*100:.1f}%",
                     "SVM Prob (%)": f"{p_svm*100:.1f}%"
